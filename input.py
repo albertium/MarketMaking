@@ -19,7 +19,7 @@ def parse_raw_itch_file(infile, outfile):
                 locate, tracking, timestamp, ref, buy_sell, shares, stock, price = struct.unpack("!HH6sQcI8sI", msg[1: 36])
                 if locate == 14:  # 14 is AAPL
                     timestamp = int.from_bytes(timestamp, "big")
-                    output.append([' A', ref, timestamp, 1 if buy_sell == b'B' else 0, price, shares])
+                    output.append([msg_type, ref, timestamp, 1 if buy_sell == b'B' else 0, price, shares])
             elif msg_type == 'E' or msg_type == 'C':
                 locate, tracking, timestamp, ref, shares, match = struct.unpack("!HH6sQIQ", msg[1:31])
                 if locate == 14:
@@ -47,9 +47,11 @@ def parse_raw_itch_file(infile, outfile):
 
 
 def preprocess_data(filename):
+    """
+    type, id, time, ...
+    """
     output = []
     record = {}
-    executed = []
     with open(filename, "r") as f:
         reader = csv.reader(f)
         for msg in reader:
@@ -57,22 +59,19 @@ def preprocess_data(filename):
                 label = 'B' if msg[3] == '1' else 'A'
                 msg[0] += label
                 record[msg[1]] = label
-            if msg[0] == 'E' or msg[0] == 'X':
+                output.append([msg[0], msg[2], msg[1], msg[4], msg[5]])
+            elif msg[0] == 'E':
                 msg[0] += record[msg[1]]
-                executed.append(msg[1])
-            if msg[0] == 'D':
-                msg[0] += record[msg[1]]
+                output.append([msg[0], msg[2], msg[1], msg[5]])
+            elif msg[0] == 'X':
+                output.append([msg[0], msg[2], msg[1], msg[5]])
+            elif msg[0] == 'D':
                 del record[msg[1]]
-            if msg[0] == 'U':
-                msg[0] += record[msg[1]]
+                output.append([msg[0], msg[2], msg[1]])
+            elif msg[0] == 'U':
                 record[msg[3]] = record[msg[1]]
                 del record[msg[1]]
-            output.append(msg)
-
-    # this is not a complete check, since "executed" order may only be partially executed
-    remaining = set(record.keys()) - set(executed)
-    if len(remaining) > 0:
-        raise RuntimeError(f'market is not cleared: {len(remaining)}')
+                output.append([msg[0], msg[2], msg[3], msg[1], msg[4], msg[5]])
 
     with open(filename[:-4] + "-v2.csv", "w") as f:
         f.write("\n".join(",".join(row) for row in output) + "\n")
