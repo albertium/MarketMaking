@@ -16,7 +16,7 @@ class Simulator:
 
         # ------ parse or retrieve message data ------
         file_name = f'{ticker}_{datetime.strftime(dp.parse(date), "%Y%m%d")}'
-        raw_file = file_name + '-v2.csv'
+        raw_file = file_name + '.csv'
         parsed_file = Path('data') / (file_name + '.pkl')
 
         start_time = time.time()
@@ -43,27 +43,24 @@ class Simulator:
             for msg in msgs:
                 msg = msg.split(',')
                 timestamp = int(msg[1])
+                ref = int(msg[2])
 
-                if msg[0] == 'AA' or msg[0] == 'AB':
-                    order = market.LimitOrder(timestamp, int(msg[2]), const.SideMapping[msg[0]], int(msg[3]), int(msg[4]))
-                elif msg[0] == 'EA' or msg[0] == 'EB':
-                    order = market.MarketOrder(timestamp, const.SideMapping[msg[0]], int(msg[3]), int(msg[2]))
+                if msg[0] == 'A':
+                    order = market.LimitOrder(timestamp, ref, const.Side(msg[3]), int(msg[4]), int(msg[5]))
+                elif msg[0] == 'E':
+                    order = market.MarketOrder(timestamp, const.Side(msg[3]), int(msg[4]), ref)
                 elif msg[0] == 'X':
-                    order = market.CancelOrder(timestamp, int(msg[2]), int(msg[3]))
+                    order = market.CancelOrder(timestamp, ref, int(msg[3]))
                 elif msg[0] == 'D':
-                    order = market.DeleteOrder(timestamp, int(msg[2]))
+                    order = market.DeleteOrder(timestamp, ref)
                 elif msg[0] == 'U':
-                    order = market.UpdateOrder(timestamp, int(msg[2]), int(msg[3]), int(msg[4]), int(msg[5]))
+                    order = market.UpdateOrder(timestamp, ref, int(msg[3]), int(msg[4]), int(msg[5]))
                 else:
                     raise ValueError('Unknown order type')
                 self.queue.append(order)
 
     def run_simulation(self):
-        ind = False
-        idx = 1
         for event in self.queue:
-            if idx == 56:
-                a = 1
             if event.type == const.Event.ADD:
                 self.book.add_limit_order(event)
             elif event.type == const.Event.EXECUTE:
@@ -75,7 +72,7 @@ class Simulator:
             elif event.type ==  const.Event.UPDATE:
                 self.book.modify_order(event)
 
-            if idx % 10 == 0:
-                a = 1
-            idx += 1
-
+        print('\n====== Simulation Summary ======')
+        print(f'Bid Order Book: {len(self.book.bid_book.levels)} orders')
+        print(f'Ask Order Book: {len(self.book.ask_book.levels)} orders')
+        print(f'Pool:           {len(self.book.pool)} orders')
